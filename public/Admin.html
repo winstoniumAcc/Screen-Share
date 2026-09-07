@@ -163,6 +163,41 @@ let iceServers = [
 const peers = {};
 const pendingCandidates = {};
 
+const ADMIN_PASSWORD = "SkibidiToilet";
+socket.on("join-admin", (password) => {
+
+    if (!ADMIN_PASSWORD || password !== ADMIN_PASSWORD) {
+
+        socket.emit("admin-denied");
+
+        return;
+    }
+
+    socket.data.role = "admin";
+
+    console.log("Admin authenticated:", socket.id);
+
+    const participants = [];
+
+    for (const client of io.sockets.sockets.values()) {
+
+        if (
+            client.data.role === "participant" &&
+            client.data.name
+        ) {
+
+            participants.push({
+                socketId: client.id,
+                name: client.data.name,
+                screenReady:
+                    client.data.screenReady === true
+            });
+        }
+    }
+
+    socket.emit("participant-list", participants);
+});
+
 
 // ========================================
 // GET ICE CONFIG
@@ -223,18 +258,39 @@ loadIceConfig();
 
 socket.on("connect", () => {
 
-    console.log(
-        "Admin connected:",
-        socket.id
+    const password = prompt(
+        "Enter admin password:"
     );
 
+    if (!password) {
+        document.body.innerHTML =
+            "<h1>Access denied</h1>";
+        return;
+    }
 
     socket.emit(
-        "join-admin"
+        "join-admin",
+        password
     );
-
 });
 
+
+socket.on("admin-denied", () => {
+
+    document.body.innerHTML = `
+        <div style="
+            font-family: Arial;
+            text-align: center;
+            margin-top: 100px;
+        ">
+            <h1>Access Denied</h1>
+            <p>Incorrect admin password.</p>
+        </div>
+    `;
+
+    socket.disconnect();
+
+});
 
 // ========================================
 // EXISTING PARTICIPANTS

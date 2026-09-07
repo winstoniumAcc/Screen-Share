@@ -2,18 +2,16 @@
 <html lang="en">
 
 <head>
-
     <meta charset="UTF-8">
 
     <meta
         name="viewport"
-        content="width=device-width, initial-scale=1.0"
+        content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     >
 
     <title>Event Participant</title>
 
     <style>
-
         * {
             box-sizing: border-box;
         }
@@ -21,10 +19,13 @@
         body {
             margin: 0;
             min-height: 100vh;
+            min-height: 100dvh;
 
             display: flex;
             justify-content: center;
             align-items: center;
+
+            padding: 20px;
 
             font-family: Arial, sans-serif;
 
@@ -33,48 +34,64 @@
         }
 
         .container {
-            width: 90%;
+            width: 100%;
             max-width: 500px;
 
-            padding: 40px;
+            padding: 28px;
 
             background: #222;
 
-            border-radius: 15px;
+            border-radius: 16px;
 
             text-align: center;
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 28px;
+        }
+
+        p {
+            color: #bbb;
+            line-height: 1.5;
         }
 
         input {
             width: 100%;
 
-            padding: 14px;
+            padding: 15px;
 
-            margin-top: 20px;
+            margin-top: 18px;
 
             border: none;
-            border-radius: 8px;
+            border-radius: 10px;
 
             font-size: 16px;
+
+            outline: none;
         }
 
         button {
             width: 100%;
 
-            padding: 14px;
+            padding: 15px;
 
             margin-top: 15px;
 
             border: none;
-            border-radius: 8px;
+            border-radius: 10px;
 
             background: #4c7dff;
-
             color: white;
 
             font-size: 16px;
+            font-weight: bold;
 
             cursor: pointer;
+        }
+
+        button:active {
+            transform: scale(0.99);
         }
 
         button:disabled {
@@ -89,7 +106,9 @@
 
             background: #333;
 
-            border-radius: 8px;
+            border-radius: 10px;
+
+            line-height: 1.4;
         }
 
         .green {
@@ -100,18 +119,56 @@
             color: #ff5555;
         }
 
-    </style>
+        .yellow {
+            color: #ffd24c;
+        }
 
+        .unsupported {
+            margin-top: 15px;
+
+            padding: 12px;
+
+            border-radius: 10px;
+
+            background: #3a2f16;
+
+            color: #ffd24c;
+
+            display: none;
+        }
+
+        @media (max-width: 600px) {
+
+            body {
+                padding: 12px;
+            }
+
+            .container {
+                padding: 22px;
+                border-radius: 14px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+
+            button,
+            input {
+                font-size: 17px;
+                padding: 16px;
+            }
+        }
+    </style>
 </head>
 
 <body>
 
 <div class="container">
 
-    <h1>Event Participant</h1>
+    <h1>Event Screen Sharing</h1>
 
     <p>
-        Enter your name and start screen sharing.
+        Enter your name, then tap the button to share your screen.
     </p>
 
     <input
@@ -119,14 +176,20 @@
         type="text"
         placeholder="Your name"
         maxlength="50"
+        autocomplete="name"
     >
 
     <button id="start">
         Start Screen Sharing
     </button>
 
+    <div id="unsupported" class="unsupported">
+        Screen sharing is not available in this browser.
+        Please use a supported browser and make sure the site is opened with HTTPS.
+    </div>
+
     <div id="status">
-        Connecting...
+        Checking browser...
     </div>
 
 </div>
@@ -156,9 +219,43 @@ const startButton =
 const status =
     document.getElementById("status");
 
+const unsupported =
+    document.getElementById("unsupported");
+
 
 // ========================================
-// GET ICE CONFIG
+// CHECK SCREEN SHARE SUPPORT
+// ========================================
+
+function supportsScreenSharing() {
+
+    return (
+        !!navigator.mediaDevices &&
+        typeof navigator.mediaDevices.getDisplayMedia === "function"
+    );
+
+}
+
+
+if (supportsScreenSharing()) {
+
+    status.textContent =
+        "Ready.";
+
+} else {
+
+    status.innerHTML =
+        '<span class="yellow">Screen sharing is not supported in this browser.</span>';
+
+    unsupported.style.display = "block";
+
+    startButton.disabled = true;
+
+}
+
+
+// ========================================
+// LOAD ICE CONFIG
 // ========================================
 
 async function loadIceConfig() {
@@ -166,10 +263,12 @@ async function loadIceConfig() {
     try {
 
         const response =
-            await fetch("/ice-config");
+            await fetch("/ice-config", {
+                cache: "no-store"
+            });
 
         if (!response.ok) {
-            throw new Error("ICE config failed");
+            throw new Error("Failed to load ICE config");
         }
 
         const config =
@@ -186,14 +285,13 @@ async function loadIceConfig() {
         }
 
         console.log(
-            "ICE servers loaded:",
-            iceServers
+            "ICE configuration loaded"
         );
 
     } catch (error) {
 
         console.error(
-            "Could not load ICE config:",
+            "ICE configuration error:",
             error
         );
 
@@ -206,19 +304,28 @@ loadIceConfig();
 
 
 // ========================================
-// CONNECT
+// SOCKET CONNECT
 // ========================================
 
 socket.on("connect", () => {
 
-    status.textContent =
-        "Connected.";
+    console.log(
+        "Connected:",
+        socket.id
+    );
+
+    if (!screenStream) {
+
+        status.textContent =
+            "Connected. Ready to share.";
+
+    }
 
 });
 
 
 // ========================================
-// START
+// START SCREEN SHARING
 // ========================================
 
 startButton.addEventListener(
@@ -229,85 +336,157 @@ startButton.addEventListener(
 
 async function startSharing() {
 
+    if (!supportsScreenSharing()) {
+
+        status.innerHTML =
+            '<span class="red">Screen sharing is not supported on this browser.</span>';
+
+        return;
+
+    }
+
+
     const name =
         nameInput.value.trim();
 
 
     if (!name) {
 
-        alert("Enter your name.");
+        alert("Please enter your name.");
+
+        nameInput.focus();
 
         return;
+
     }
 
 
     startButton.disabled = true;
+
     nameInput.disabled = true;
 
 
     status.textContent =
-        "Choose your screen...";
+        "Opening screen sharing...";
 
 
     try {
 
+        /*
+         * The browser MUST ask the user
+         * which screen/display to share.
+         *
+         * This call must happen from a user gesture.
+         */
+
         screenStream =
-            await navigator.mediaDevices
-                .getDisplayMedia({
-                    video: true,
-                    audio: false
-                });
+            await navigator.mediaDevices.getDisplayMedia({
+
+                video: {
+                    frameRate: {
+                        ideal: 15,
+                        max: 30
+                    }
+                },
+
+                audio: false
+
+            });
 
 
+        const videoTrack =
+            screenStream.getVideoTracks()[0];
+
+
+        // Tell the browser this is screen content.
+        if ("contentHint" in videoTrack) {
+
+            videoTrack.contentHint =
+                "detail";
+
+        }
+
+
+        console.log(
+            "Screen track:",
+            videoTrack.getSettings()
+        );
+
+
+        // Join event
         socket.emit(
             "join-participant",
             name
         );
 
 
+        // Tell admin screen is ready
         socket.emit(
             "screen-ready"
         );
 
 
         status.innerHTML =
-            '<span class="green">● Screen sharing active</span>';
+            '<span class="green">● Screen sharing is active</span>';
 
 
-        const track =
-            screenStream.getVideoTracks()[0];
-
-
-        track.addEventListener(
+        // Detect when user stops sharing
+        videoTrack.addEventListener(
             "ended",
-            () => {
-
-                status.innerHTML =
-                    '<span class="red">● Screen sharing stopped</span>';
-
-
-                socket.emit(
-                    "screen-stopped"
-                );
-
-            }
+            handleScreenStopped
         );
 
 
     } catch (error) {
 
         console.error(
-            "Screen sharing error:",
+            "Screen sharing failed:",
             error
         );
 
 
-        status.innerHTML =
-            '<span class="red">Screen sharing was cancelled.</span>';
+        screenStream = null;
 
 
-        startButton.disabled = false;
         nameInput.disabled = false;
+        startButton.disabled = false;
+
+
+        let message =
+            "Screen sharing failed.";
+
+
+        if (error.name === "NotAllowedError") {
+
+            message =
+                "Screen sharing was cancelled or permission was denied.";
+
+        } else if (
+            error.name === "NotSupportedError"
+        ) {
+
+            message =
+                "This browser does not support screen sharing.";
+
+        } else if (
+            error.name === "AbortError"
+        ) {
+
+            message =
+                "Screen sharing was cancelled.";
+
+        } else if (
+            error.name === "InvalidStateError"
+        ) {
+
+            message =
+                "Please start screen sharing directly from the button.";
+
+        }
+
+
+        status.innerHTML =
+            `<span class="red">${message}</span>`;
 
     }
 
@@ -315,7 +494,42 @@ async function startSharing() {
 
 
 // ========================================
-// RECEIVE OFFER
+// SCREEN STOPPED
+// ========================================
+
+function handleScreenStopped() {
+
+    console.log(
+        "Screen sharing stopped"
+    );
+
+
+    socket.emit(
+        "screen-stopped"
+    );
+
+
+    for (
+        const id in peers
+    ) {
+
+        try {
+            peers[id].close();
+        } catch {}
+
+        delete peers[id];
+
+    }
+
+
+    status.innerHTML =
+        '<span class="red">● Screen sharing stopped</span>';
+
+}
+
+
+// ========================================
+// RECEIVE OFFER FROM ADMIN
 // ========================================
 
 socket.on(
@@ -325,16 +539,25 @@ socket.on(
         if (!screenStream) {
 
             console.error(
-                "Received offer but no screen stream"
+                "Received WebRTC offer without screen stream"
             );
 
             return;
+
         }
+
+
+        console.log(
+            "Received offer from admin:",
+            sender
+        );
 
 
         if (peers[sender]) {
 
-            peers[sender].close();
+            try {
+                peers[sender].close();
+            } catch {}
 
         }
 
@@ -348,21 +571,26 @@ socket.on(
         peers[sender] =
             peer;
 
+
         pendingCandidates[sender] =
             [];
 
 
-        // Send screen video
-        screenStream
-            .getTracks()
-            .forEach(track => {
+        // Add the screen track
+        const tracks =
+            screenStream.getTracks();
 
-                peer.addTrack(
-                    track,
-                    screenStream
-                );
 
-            });
+        for (
+            const track of tracks
+        ) {
+
+            peer.addTrack(
+                track,
+                screenStream
+            );
+
+        }
 
 
         // ICE
@@ -415,8 +643,7 @@ socket.on(
             );
 
 
-            // Add candidates received early
-
+            // Add ICE candidates that arrived early
             for (
                 const candidate
                 of pendingCandidates[sender]
@@ -454,7 +681,7 @@ socket.on(
         } catch (error) {
 
             console.error(
-                "WebRTC answer error:",
+                "WebRTC error:",
                 error
             );
 
@@ -465,7 +692,7 @@ socket.on(
 
 
 // ========================================
-// ICE CANDIDATE
+// RECEIVE ICE
 // ========================================
 
 socket.on(
@@ -475,21 +702,19 @@ socket.on(
         candidate
     }) => {
 
+        if (!pendingCandidates[sender]) {
+
+            pendingCandidates[sender] =
+                [];
+
+        }
+
+
         const peer =
             peers[sender];
 
 
         if (!peer) {
-
-            if (
-                !pendingCandidates[sender]
-            ) {
-
-                pendingCandidates[sender] =
-                    [];
-
-            }
-
 
             pendingCandidates[sender]
                 .push(candidate);
@@ -512,16 +737,6 @@ socket.on(
 
             } else {
 
-                if (
-                    !pendingCandidates[sender]
-                ) {
-
-                    pendingCandidates[sender] =
-                        [];
-
-                }
-
-
                 pendingCandidates[sender]
                     .push(candidate);
 
@@ -530,7 +745,7 @@ socket.on(
         } catch (error) {
 
             console.error(
-                "ICE error:",
+                "ICE candidate error:",
                 error
             );
 
@@ -541,7 +756,7 @@ socket.on(
 
 
 // ========================================
-// CLOSE
+// PAGE CLOSED
 // ========================================
 
 window.addEventListener(
@@ -552,9 +767,9 @@ window.addEventListener(
 
             screenStream
                 .getTracks()
-                .forEach(track => {
-                    track.stop();
-                });
+                .forEach(
+                    track => track.stop()
+                );
 
         }
 
