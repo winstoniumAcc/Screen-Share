@@ -12,44 +12,30 @@
 
     <title>Event Admin</title>
 
-
     <style>
 
         * {
             box-sizing: border-box;
         }
 
-
         body {
-
             margin: 0;
-
             padding: 25px;
 
             font-family: Arial, sans-serif;
 
             background: #111;
-
             color: white;
-
         }
-
 
         h1 {
-
             margin-top: 0;
-
         }
-
 
         #info {
-
             margin-bottom: 20px;
-
             color: #aaa;
-
         }
-
 
         #participants {
 
@@ -62,9 +48,7 @@
                 );
 
             gap: 15px;
-
         }
-
 
         .participant {
 
@@ -73,11 +57,7 @@
             padding: 12px;
 
             border-radius: 12px;
-
-            overflow: hidden;
-
         }
-
 
         .header {
 
@@ -88,46 +68,30 @@
             align-items: center;
 
             margin-bottom: 10px;
-
         }
-
 
         .name {
 
             font-size: 18px;
 
             font-weight: bold;
-
         }
-
 
         .status {
-
             font-size: 13px;
-
         }
-
 
         .online {
-
             color: #4cff72;
-
         }
-
 
         .offline {
-
             color: #ff5555;
-
         }
-
 
         .sharing {
-
             color: #4c9cff;
-
         }
-
 
         video {
 
@@ -145,31 +109,11 @@
 
         }
 
-
-        .no-screen {
-
-            display: flex;
-
-            justify-content: center;
-
-            align-items: center;
-
-            aspect-ratio: 16 / 9;
-
-            background: #080808;
-
-            border-radius: 8px;
-
-            color: #777;
-
-        }
-
-
         .empty {
 
             text-align: center;
 
-            padding: 80px 20px;
+            padding: 80px;
 
             color: #666;
 
@@ -182,804 +126,761 @@
 
 <body>
 
+<h1>Event Admin Dashboard</h1>
 
-    <h1>Event Admin Dashboard</h1>
+<div id="info">
 
+    Online participants:
+    <strong id="count">0</strong>
 
-    <div id="info">
+</div>
 
-        Online participants:
-        <strong id="count">0</strong>
+<div id="participants">
 
+    <div
+        class="empty"
+        id="empty"
+    >
+        No participants connected.
     </div>
 
+</div>
 
-    <div id="participants">
 
-        <div class="empty" id="empty">
+<script src="/socket.io/socket.io.js"></script>
 
-            No participants connected.
+<script>
+
+const socket = io();
+
+const peers = {};
+const pendingCandidates = {};
+
+
+// ==========================
+// ADMIN CONNECTS
+// ==========================
+
+socket.on("connect", () => {
+
+    console.log(
+        "Admin connected:",
+        socket.id
+    );
+
+    socket.emit("join-admin");
+
+});
+
+
+// ==========================
+// EXISTING PARTICIPANTS
+// ==========================
+
+socket.on(
+    "participant-list",
+    participants => {
+
+        participants.forEach(
+            participant => {
+
+                addParticipant(
+                    participant
+                );
+
+                if (
+                    participant.screenReady
+                ) {
+
+                    createOffer(
+                        participant.socketId
+                    );
+
+                }
+
+            }
+        );
+
+        updateCount();
+
+    }
+);
+
+
+// ==========================
+// NEW PARTICIPANT
+// ==========================
+
+socket.on(
+    "participant-joined",
+    participant => {
+
+        addParticipant(
+            participant
+        );
+
+        updateCount();
+
+    }
+);
+
+
+// ==========================
+// SCREEN READY
+// ==========================
+
+socket.on(
+    "screen-ready",
+    participant => {
+
+        console.log(
+            "Screen ready:",
+            participant.name
+        );
+
+        addParticipant(
+            participant
+        );
+
+        setStatus(
+            participant.socketId,
+            "● CONNECTING",
+            "sharing"
+        );
+
+        createOffer(
+            participant.socketId
+        );
+
+    }
+);
+
+
+// ==========================
+// SCREEN STOPPED
+// ==========================
+
+socket.on(
+    "screen-stopped",
+    participant => {
+
+        const element =
+            document.getElementById(
+                "p-" + participant.socketId
+            );
+
+        if (!element) {
+            return;
+        }
+
+        const video =
+            element.querySelector("video");
+
+        if (video) {
+            video.srcObject = null;
+        }
+
+        setStatus(
+            participant.socketId,
+            "● SCREEN STOPPED",
+            "offline"
+        );
+
+        if (
+            peers[
+                participant.socketId
+            ]
+        ) {
+
+            peers[
+                participant.socketId
+            ].close();
+
+            delete peers[
+                participant.socketId
+            ];
+
+        }
+
+    }
+);
+
+
+// ==========================
+// PARTICIPANT LEFT
+// ==========================
+
+socket.on(
+    "participant-left",
+    participant => {
+
+        console.log(
+            "Participant left:",
+            participant.name
+        );
+
+        const element =
+            document.getElementById(
+                "p-" + participant.socketId
+            );
+
+        if (!element) {
+            return;
+        }
+
+        setStatus(
+            participant.socketId,
+            "● OFFLINE",
+            "offline"
+        );
+
+        const video =
+            element.querySelector(
+                "video"
+            );
+
+        if (video) {
+            video.srcObject = null;
+        }
+
+        if (
+            peers[
+                participant.socketId
+            ]
+        ) {
+
+            peers[
+                participant.socketId
+            ].close();
+
+            delete peers[
+                participant.socketId
+            ];
+
+        }
+
+        updateCount();
+
+    }
+);
+
+
+// ==========================
+// ADD PARTICIPANT
+// ==========================
+
+function addParticipant(
+    participant
+) {
+
+    if (
+        document.getElementById(
+            "p-" + participant.socketId
+        )
+    ) {
+        return;
+    }
+
+    const empty =
+        document.getElementById("empty");
+
+    if (empty) {
+        empty.remove();
+    }
+
+    const card =
+        document.createElement("div");
+
+    card.className =
+        "participant";
+
+    card.id =
+        "p-" +
+        participant.socketId;
+
+    card.innerHTML = `
+
+        <div class="header">
+
+            <div class="name">
+                ${escapeHTML(
+                    participant.name
+                )}
+            </div>
+
+            <div class="status online">
+                ● ONLINE
+            </div>
 
         </div>
 
-    </div>
+        <video
+            autoplay
+            muted
+            playsinline
+        ></video>
+
+    `;
+
+    document
+        .getElementById(
+            "participants"
+        )
+        .appendChild(card);
+
+    updateCount();
+
+}
 
 
-    <script src="/socket.io/socket.io.js"></script>
+// ==========================
+// CREATE OFFER
+// ==========================
+
+async function createOffer(
+    target
+) {
+
+    // Close existing connection
+    if (peers[target]) {
+
+        peers[target].close();
+
+        delete peers[target];
+
+    }
 
 
-    <script>
+    const peer =
+        new RTCPeerConnection({
 
+            iceServers: [
 
-        const socket = io();
+                {
+                    urls:
+                        "stun:stun.l.google.com:19302"
+                }
 
-
-        const peers = {};
-
-        const pendingCandidates = {};
-
-
-        // =========================
-        // ADMIN CONNECTS
-        // =========================
-
-        socket.on("connect", () => {
-
-            console.log(
-                "Admin connected:",
-                socket.id
-            );
-
-
-            socket.emit("join-admin");
+            ]
 
         });
 
 
-        // =========================
-        // EXISTING PARTICIPANTS
-        // =========================
+    peers[target] =
+        peer;
 
-        socket.on(
-            "participant-list",
-            participants => {
+    pendingCandidates[target] =
+        [];
 
-                participants.forEach(
-                    participant => {
 
-                        addParticipant(
-                            participant
-                        );
+    // ======================
+    // RECEIVE VIDEO
+    // ======================
 
-                    }
+    peer.addTransceiver(
+        "video",
+        {
+            direction: "recvonly"
+        }
+    );
+
+
+    peer.ontrack = event => {
+
+        console.log(
+            "Received video from:",
+            target
+        );
+
+
+        const card =
+            document.getElementById(
+                "p-" + target
+            );
+
+
+        if (!card) {
+            return;
+        }
+
+
+        const video =
+            card.querySelector(
+                "video"
+            );
+
+
+        video.srcObject =
+            event.streams[0];
+
+
+        // Explicitly start playback
+        video.play().catch(
+            error => {
+                console.error(
+                    "Video play error:",
+                    error
                 );
-
-
-                updateCount();
-
             }
         );
 
 
-        // =========================
-        // NEW PARTICIPANT
-        // =========================
-
-        socket.on(
-            "participant-joined",
-            participant => {
-
-                addParticipant(
-                    participant
-                );
-
-                updateCount();
-
-            }
+        setStatus(
+            target,
+            "● SHARING",
+            "sharing"
         );
 
+    };
 
-        // =========================
-        // SCREEN READY
-        // =========================
 
-        socket.on(
-            "screen-ready",
-            participant => {
+    // ======================
+    // ICE
+    // ======================
 
-                console.log(
-                    "Screen ready:",
-                    participant.name
-                );
+    peer.onicecandidate =
+        event => {
 
-
-                addParticipant(
-                    participant
-                );
-
-
-                const element =
-                    document.getElementById(
-                        "p-" + participant.socketId
-                    );
-
-
-                if (element) {
-
-                    const status =
-                        element.querySelector(
-                            ".status"
-                        );
-
-
-                    status.textContent =
-                        "● CONNECTING";
-
-                    status.className =
-                        "status sharing";
-
-                }
-
-
-                createOffer(
-                    participant.socketId
-                );
-
-            }
-        );
-
-
-        // =========================
-        // SCREEN STOPPED
-        // =========================
-
-        socket.on(
-            "screen-stopped",
-            participant => {
-
-                const element =
-                    document.getElementById(
-                        "p-" + participant.socketId
-                    );
-
-
-                if (!element) {
-                    return;
-                }
-
-
-                const status =
-                    element.querySelector(
-                        ".status"
-                    );
-
-
-                status.textContent =
-                    "● SCREEN STOPPED";
-
-                status.className =
-                    "status offline";
-
-
-                const video =
-                    element.querySelector(
-                        "video"
-                    );
-
-
-                if (video) {
-
-                    video.srcObject = null;
-
-                }
-
-
-                if (
-                    peers[
-                        participant.socketId
-                    ]
-                ) {
-
-                    peers[
-                        participant.socketId
-                    ].close();
-
-
-                    delete peers[
-                        participant.socketId
-                    ];
-
-                }
-
-            }
-        );
-
-
-        // =========================
-        // PARTICIPANT LEFT
-        // =========================
-
-        socket.on(
-            "participant-left",
-            participant => {
-
-                console.log(
-                    "Participant left:",
-                    participant.name
-                );
-
-
-                const element =
-                    document.getElementById(
-                        "p-" + participant.socketId
-                    );
-
-
-                if (!element) {
-                    return;
-                }
-
-
-                const status =
-                    element.querySelector(
-                        ".status"
-                    );
-
-
-                status.textContent =
-                    "● OFFLINE";
-
-                status.className =
-                    "status offline";
-
-
-                const video =
-                    element.querySelector(
-                        "video"
-                    );
-
-
-                if (video) {
-
-                    video.srcObject = null;
-
-                }
-
-
-                if (
-                    peers[
-                        participant.socketId
-                    ]
-                ) {
-
-                    peers[
-                        participant.socketId
-                    ].close();
-
-
-                    delete peers[
-                        participant.socketId
-                    ];
-
-                }
-
-
-                updateCount();
-
-            }
-        );
-
-
-        // =========================
-        // ADD PARTICIPANT CARD
-        // =========================
-
-        function addParticipant(
-            participant
-        ) {
-
-            const existing =
-                document.getElementById(
-                    "p-" + participant.socketId
-                );
-
-
-            if (existing) {
+            if (!event.candidate) {
                 return;
             }
 
-
-            // Remove empty message
-            const empty =
-                document.getElementById(
-                    "empty"
-                );
-
-
-            if (empty) {
-
-                empty.remove();
-
-            }
-
-
-            const div =
-                document.createElement(
-                    "div"
-                );
-
-
-            div.className =
-                "participant";
-
-
-            div.id =
-                "p-" +
-                participant.socketId;
-
-
-            div.innerHTML = `
-
-                <div class="header">
-
-                    <div class="name">
-                        ${escapeHTML(
-                            participant.name
-                        )}
-                    </div>
-
-                    <div class="status online">
-                        ● ONLINE
-                    </div>
-
-                </div>
-
-
-                <video
-                    autoplay
-                    playsinline
-                ></video>
-
-            `;
-
-
-            document
-                .getElementById(
-                    "participants"
-                )
-                .appendChild(div);
-
-
-            updateCount();
-
-        }
-
-
-        // =========================
-        // CREATE WEBRTC OFFER
-        // =========================
-
-        async function createOffer(
-            target
-        ) {
-
-            // Don't create duplicate connection
-            if (peers[target]) {
-
-                peers[target].close();
-
-                delete peers[target];
-
-            }
-
-
-            const peer =
-                new RTCPeerConnection({
-
-                    iceServers: [
-
-                        {
-                            urls:
-                                "stun:stun.l.google.com:19302"
-                        }
-
-                    ]
-
-                });
-
-
-            peers[target] =
-                peer;
-
-
-            pendingCandidates[target] =
-                [];
-
-
-            // =========================
-            // RECEIVE SCREEN
-            // =========================
-
-            peer.ontrack =
-                event => {
-
-                    console.log(
-                        "Received screen from:",
-                        target
-                    );
-
-
-                    const element =
-                        document.getElementById(
-                            "p-" + target
-                        );
-
-
-                    if (!element) {
-                        return;
-                    }
-
-
-                    const video =
-                        element.querySelector(
-                            "video"
-                        );
-
-
-                    if (video) {
-
-                        video.srcObject =
-                            event.streams[0];
-
-                    }
-
-
-                    const status =
-                        element.querySelector(
-                            ".status"
-                        );
-
-
-                    if (status) {
-
-                        status.textContent =
-                            "● SHARING";
-
-                        status.className =
-                            "status sharing";
-
-                    }
-
-                };
-
-
-            // =========================
-            // ICE
-            // =========================
-
-            peer.onicecandidate =
-                event => {
-
-                    if (!event.candidate) {
-                        return;
-                    }
-
-
-                    socket.emit(
-                        "ice-candidate",
-                        {
-                            target,
-                            candidate:
-                                event.candidate
-                        }
-                    );
-
-                };
-
-
-            // =========================
-            // CONNECTION STATE
-            // =========================
-
-            peer.onconnectionstatechange =
-                () => {
-
-                    console.log(
-                        "WebRTC connection:",
-                        target,
-                        peer.connectionState
-                    );
-
-
-                    const element =
-                        document.getElementById(
-                            "p-" + target
-                        );
-
-
-                    if (!element) {
-                        return;
-                    }
-
-
-                    const status =
-                        element.querySelector(
-                            ".status"
-                        );
-
-
-                    if (
-                        peer.connectionState ===
-                        "connected"
-                    ) {
-
-                        status.textContent =
-                            "● SHARING";
-
-                        status.className =
-                            "status sharing";
-
-                    }
-
-
-                    if (
-                        peer.connectionState ===
-                        "connecting"
-                    ) {
-
-                        status.textContent =
-                            "● CONNECTING";
-
-                        status.className =
-                            "status sharing";
-
-                    }
-
-
-                    if (
-                        peer.connectionState ===
-                        "failed"
-                    ) {
-
-                        status.textContent =
-                            "● CONNECTION FAILED";
-
-                        status.className =
-                            "status offline";
-
-                    }
-
-                };
-
-
-            try {
-
-                // Create offer
-                const offer =
-                    await peer.createOffer();
-
-
-                await peer.setLocalDescription(
-                    offer
-                );
-
-
-                // Send offer to participant
-                socket.emit(
-                    "offer",
-                    {
-                        target,
-                        offer
-                    }
-                );
-
-
-            } catch (error) {
-
-                console.error(
-                    "Offer error:",
-                    error
-                );
-
-            }
-
-        }
-
-
-        // =========================
-        // RECEIVE ANSWER
-        // =========================
-
-        socket.on(
-            "answer",
-            async ({ sender, answer }) => {
-
-                const peer =
-                    peers[sender];
-
-
-                if (!peer) {
-                    return;
+            socket.emit(
+                "ice-candidate",
+                {
+                    target,
+                    candidate:
+                        event.candidate
                 }
+            );
+
+        };
 
 
-                try {
+    peer.oniceconnectionstatechange =
+        () => {
 
-                    await peer.setRemoteDescription(
-                        answer
-                    );
+            console.log(
+                "ICE:",
+                target,
+                peer.iceConnectionState
+            );
 
-
-                    // Add candidates that arrived early
-                    if (
-                        pendingCandidates[sender]
-                    ) {
-
-                        for (
-                            const candidate
-                            of pendingCandidates[sender]
-                        ) {
-
-                            await peer.addIceCandidate(
-                                candidate
-                            );
-
-                        }
+        };
 
 
-                        pendingCandidates[sender] =
-                            [];
+    peer.onconnectionstatechange =
+        () => {
 
-                    }
+            console.log(
+                "Connection:",
+                target,
+                peer.connectionState
+            );
 
-                } catch (error) {
 
-                    console.error(
-                        "Answer error:",
-                        error
-                    );
+            if (
+                peer.connectionState ===
+                "connected"
+            ) {
 
-                }
+                setStatus(
+                    target,
+                    "● SHARING",
+                    "sharing"
+                );
 
+            }
+
+
+            if (
+                peer.connectionState ===
+                "failed"
+            ) {
+
+                setStatus(
+                    target,
+                    "● CONNECTION FAILED",
+                    "offline"
+                );
+
+            }
+
+        };
+
+
+    try {
+
+        const offer =
+            await peer.createOffer();
+
+
+        await peer.setLocalDescription(
+            offer
+        );
+
+
+        socket.emit(
+            "offer",
+            {
+                target,
+                offer
             }
         );
 
 
-        // =========================
-        // RECEIVE ICE
-        // =========================
+    } catch (error) {
 
-        socket.on(
-            "ice-candidate",
-            async ({
-                sender,
-                candidate
-            }) => {
-
-                const peer =
-                    peers[sender];
-
-
-                if (!peer) {
-                    return;
-                }
-
-
-                try {
-
-                    if (
-                        peer.remoteDescription &&
-                        peer.remoteDescription.type
-                    ) {
-
-                        await peer.addIceCandidate(
-                            candidate
-                        );
-
-                    } else {
-
-                        if (
-                            !pendingCandidates[
-                                sender
-                            ]
-                        ) {
-
-                            pendingCandidates[
-                                sender
-                            ] = [];
-
-                        }
-
-
-                        pendingCandidates[
-                            sender
-                        ].push(candidate);
-
-                    }
-
-                } catch (error) {
-
-                    console.error(
-                        "ICE error:",
-                        error
-                    );
-
-                }
-
-            }
+        console.error(
+            "Offer error:",
+            error
         );
 
+    }
 
-        // =========================
-        // UPDATE COUNT
-        // =========================
-
-        function updateCount() {
-
-            const cards =
-                document.querySelectorAll(
-                    ".participant"
-                );
+}
 
 
-            let online = 0;
+// ==========================
+// RECEIVE ANSWER
+// ==========================
+
+socket.on(
+    "answer",
+    async ({ sender, answer }) => {
+
+        const peer =
+            peers[sender];
 
 
-            cards.forEach(card => {
-
-                const status =
-                    card.querySelector(
-                        ".status"
-                    );
+        if (!peer) {
+            return;
+        }
 
 
-                if (
-                    status &&
-                    !status.classList.contains(
-                        "offline"
-                    )
+        try {
+
+            await peer.setRemoteDescription(
+                answer
+            );
+
+
+            // Add candidates that arrived
+            // before the answer
+
+            if (
+                pendingCandidates[sender]
+            ) {
+
+                for (
+                    const candidate
+                    of pendingCandidates[sender]
                 ) {
 
-                    online++;
+                    await peer.addIceCandidate(
+                        candidate
+                    );
 
                 }
 
-            });
+
+                pendingCandidates[sender] =
+                    [];
+
+            }
+
+        } catch (error) {
+
+            console.error(
+                "Answer error:",
+                error
+            );
+
+        }
+
+    }
+);
 
 
-            document.getElementById(
-                "count"
-            ).textContent = online;
+// ==========================
+// RECEIVE ICE
+// ==========================
+
+socket.on(
+    "ice-candidate",
+    async ({
+        sender,
+        candidate
+    }) => {
+
+        const peer =
+            peers[sender];
+
+
+        // Candidate came before
+        // peer was created
+
+        if (!peer) {
+
+            if (
+                !pendingCandidates[sender]
+            ) {
+
+                pendingCandidates[sender] =
+                    [];
+
+            }
+
+            pendingCandidates[sender]
+                .push(candidate);
+
+            return;
 
         }
 
 
-        // =========================
-        // ESCAPE HTML
-        // =========================
+        try {
 
-        function escapeHTML(
-            text
-        ) {
+            if (
+                peer.remoteDescription &&
+                peer.remoteDescription.type
+            ) {
 
-            const div =
-                document.createElement(
-                    "div"
+                await peer.addIceCandidate(
+                    candidate
                 );
 
+            } else {
 
-            div.textContent =
-                text;
+                if (
+                    !pendingCandidates[
+                        sender
+                    ]
+                ) {
 
+                    pendingCandidates[
+                        sender
+                    ] = [];
 
-            return div.innerHTML;
+                }
+
+                pendingCandidates[
+                    sender
+                ].push(candidate);
+
+            }
+
+        } catch (error) {
+
+            console.error(
+                "ICE error:",
+                error
+            );
 
         }
 
+    }
+);
 
-    </script>
 
+// ==========================
+// STATUS
+// ==========================
+
+function setStatus(
+    socketId,
+    text,
+    className
+) {
+
+    const card =
+        document.getElementById(
+            "p-" + socketId
+        );
+
+    if (!card) {
+        return;
+    }
+
+    const status =
+        card.querySelector(
+            ".status"
+        );
+
+    if (!status) {
+        return;
+    }
+
+    status.textContent =
+        text;
+
+    status.className =
+        "status " +
+        className;
+
+}
+
+
+// ==========================
+// COUNT
+// ==========================
+
+function updateCount() {
+
+    const cards =
+        document.querySelectorAll(
+            ".participant"
+        );
+
+    let online = 0;
+
+    cards.forEach(card => {
+
+        const status =
+            card.querySelector(
+                ".status"
+            );
+
+        if (
+            status &&
+            !status.classList.contains(
+                "offline"
+            )
+        ) {
+
+            online++;
+
+        }
+
+    });
+
+    document.getElementById(
+        "count"
+    ).textContent =
+        online;
+
+}
+
+
+// ==========================
+// ESCAPE HTML
+// ==========================
+
+function escapeHTML(text) {
+
+    const div =
+        document.createElement(
+            "div"
+        );
+
+    div.textContent =
+        text;
+
+    return div.innerHTML;
+
+}
+
+</script>
 
 </body>
-
 </html>
