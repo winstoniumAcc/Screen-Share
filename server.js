@@ -35,7 +35,7 @@ app.get("/participant", (req, res) => {
 app.get("/admin", (req, res) => {
 
     res.sendFile(
-        path.join(__dirname, "public", "admin.html")
+        path.join(__dirname, "public", "Admin.html")
     );
 
 });
