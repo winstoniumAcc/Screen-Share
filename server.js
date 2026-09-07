@@ -7,144 +7,159 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+const PORT = process.env.PORT || 3000;
 
-// =========================
-// SERVE WEBSITE
-// =========================
+
+// ========================================
+// STATIC FILES
+// ========================================
 
 app.use(express.static(path.join(__dirname, "public")));
 
 
-// =========================
-// PARTICIPANT PAGE
-// =========================
+// ========================================
+// PAGES
+// ========================================
 
-app.get("/participant", (req, res) => {
-
+app.get("/", (req, res) => {
     res.sendFile(
         path.join(__dirname, "public", "participant.html")
     );
-
 });
 
-
-// =========================
-// ADMIN PAGE
-// =========================
+app.get("/participant", (req, res) => {
+    res.sendFile(
+        path.join(__dirname, "public", "participant.html")
+    );
+});
 
 app.get("/admin", (req, res) => {
-
     res.sendFile(
         path.join(__dirname, "public", "Admin.html")
     );
+});
+
+
+// ========================================
+// WEBRTC ICE CONFIG
+// ========================================
+//
+// Add these environment variables in Render:
+//
+// TURN_URL
+// TURN_USERNAME
+// TURN_PASSWORD
+//
+// Example:
+// TURN_URL=turn:your-turn-server.com:3478
+//
+
+app.get("/ice-config", (req, res) => {
+
+    const iceServers = [
+        {
+            urls: "stun:stun.l.google.com:19302"
+        }
+    ];
+
+
+    // Add TURN only if configured
+    if (
+        process.env.TURN_URL &&
+        process.env.TURN_USERNAME &&
+        process.env.TURN_PASSWORD
+    ) {
+
+        iceServers.push({
+            urls: process.env.TURN_URL,
+            username: process.env.TURN_USERNAME,
+            credential: process.env.TURN_PASSWORD
+        });
+
+    }
+
+
+    res.json({
+        iceServers
+    });
 
 });
 
 
-// =========================
-// ROOT PAGE
-// =========================
-
-app.get("/", (req, res) => {
-
-    res.send(`
-        <h1>Event Screen Share</h1>
-
-        <p>
-            <a href="/participant">
-                Participant
-            </a>
-        </p>
-
-        <p>
-            <a href="/admin">
-                Admin
-            </a>
-        </p>
-    `);
-
-});
-
-
-// =========================
+// ========================================
 // SOCKET.IO
-// =========================
+// ========================================
 
 io.on("connection", (socket) => {
 
-    console.log(
-        "Connected:",
-        socket.id
-    );
+    console.log("Connected:", socket.id);
 
 
-    // =========================
-    // PARTICIPANT JOINS
-    // =========================
+    // ====================================
+    // PARTICIPANT JOIN
+    // ====================================
 
     socket.on("join-participant", (name) => {
 
         socket.data.role = "participant";
 
         socket.data.name =
-            name?.trim() || "Unknown";
+            String(name || "Unknown").trim();
 
+        socket.data.screenReady = false;
 
         console.log(
-            "Participant joined:",
-            socket.data.name,
-            socket.id
+            `Participant joined: ${socket.data.name}`
         );
 
-
-        // Tell admin/other clients
-        // that a participant joined
 
         socket.broadcast.emit(
             "participant-joined",
             {
                 socketId: socket.id,
-                name: socket.data.name
+                name: socket.data.name,
+                screenReady: false
             }
         );
 
     });
 
 
-    // =========================
-    // ADMIN JOINS
-    // =========================
+    // ====================================
+    // ADMIN JOIN
+    // ====================================
 
     socket.on("join-admin", () => {
 
         socket.data.role = "admin";
 
-
         console.log(
-            "Admin joined:",
-            socket.id
+            `Admin joined: ${socket.id}`
         );
 
 
-        // Get currently connected participants
+        const participants = [];
 
-        const participants = [
-            ...io.sockets.sockets.values()
-        ]
-            .filter(
-                s =>
-                    s.data.role === "participant" &&
-                    s.data.name
-            )
-            .map(
-                s => ({
-                    socketId: s.id,
-                    name: s.data.name
-                })
-            );
+        for (
+            const client
+            of io.sockets.sockets.values()
+        ) {
 
+            if (
+                client.data.role === "participant"
+            ) {
 
-        // Send list to admin
+                participants.push({
+                    socketId: client.id,
+                    name: client.data.name,
+                    screenReady:
+                        client.data.screenReady === true
+                });
+
+            }
+
+        }
+
 
         socket.emit(
             "participant-list",
@@ -154,9 +169,9 @@ io.on("connection", (socket) => {
     });
 
 
-    // =========================
+    // ====================================
     // SCREEN READY
-    // =========================
+    // ====================================
 
     socket.on("screen-ready", () => {
 
@@ -167,14 +182,13 @@ io.on("connection", (socket) => {
         }
 
 
+        socket.data.screenReady = true;
+
+
         console.log(
-            "Screen ready:",
-            socket.data.name
+            `Screen ready: ${socket.data.name}`
         );
 
-
-        // Tell everyone EXCEPT
-        // the participant
 
         socket.broadcast.emit(
             "screen-ready",
@@ -187,9 +201,9 @@ io.on("connection", (socket) => {
     });
 
 
-    // =========================
+    // ====================================
     // SCREEN STOPPED
-    // =========================
+    // ====================================
 
     socket.on("screen-stopped", () => {
 
@@ -200,10 +214,7 @@ io.on("connection", (socket) => {
         }
 
 
-        console.log(
-            "Screen stopped:",
-            socket.data.name
-        );
+        socket.data.screenReady = false;
 
 
         socket.broadcast.emit(
@@ -217,18 +228,15 @@ io.on("connection", (socket) => {
     });
 
 
-    // =========================
+    // ====================================
     // WEBRTC OFFER
-    // =========================
+    // ====================================
 
     socket.on(
         "offer",
         ({ target, offer }) => {
 
-            if (
-                !target ||
-                !offer
-            ) {
+            if (!target || !offer) {
                 return;
             }
 
@@ -237,7 +245,7 @@ io.on("connection", (socket) => {
                 "offer",
                 {
                     sender: socket.id,
-                    offer: offer
+                    offer
                 }
             );
 
@@ -245,18 +253,15 @@ io.on("connection", (socket) => {
     );
 
 
-    // =========================
+    // ====================================
     // WEBRTC ANSWER
-    // =========================
+    // ====================================
 
     socket.on(
         "answer",
         ({ target, answer }) => {
 
-            if (
-                !target ||
-                !answer
-            ) {
+            if (!target || !answer) {
                 return;
             }
 
@@ -265,7 +270,7 @@ io.on("connection", (socket) => {
                 "answer",
                 {
                     sender: socket.id,
-                    answer: answer
+                    answer
                 }
             );
 
@@ -273,18 +278,15 @@ io.on("connection", (socket) => {
     );
 
 
-    // =========================
+    // ====================================
     // ICE CANDIDATE
-    // =========================
+    // ====================================
 
     socket.on(
         "ice-candidate",
         ({ target, candidate }) => {
 
-            if (
-                !target ||
-                !candidate
-            ) {
+            if (!target || !candidate) {
                 return;
             }
 
@@ -293,7 +295,7 @@ io.on("connection", (socket) => {
                 "ice-candidate",
                 {
                     sender: socket.id,
-                    candidate: candidate
+                    candidate
                 }
             );
 
@@ -301,9 +303,9 @@ io.on("connection", (socket) => {
     );
 
 
-    // =========================
+    // ====================================
     // DISCONNECT
-    // =========================
+    // ====================================
 
     socket.on(
         "disconnect",
@@ -315,9 +317,6 @@ io.on("connection", (socket) => {
                 reason
             );
 
-
-            // Only participants
-            // should trigger participant-left
 
             if (
                 socket.data.role ===
@@ -332,11 +331,6 @@ io.on("connection", (socket) => {
                     }
                 );
 
-
-                console.log(
-                    `${socket.data.name} disconnected`
-                );
-
             }
 
         }
@@ -345,13 +339,9 @@ io.on("connection", (socket) => {
 });
 
 
-// =========================
-// START SERVER
-// =========================
-
-const PORT =
-    process.env.PORT || 3000;
-
+// ========================================
+// START
+// ========================================
 
 server.listen(
     PORT,

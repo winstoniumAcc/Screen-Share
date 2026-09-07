@@ -2,11 +2,18 @@
 <html lang="en">
 
 <head>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
     <title>Event Participant</title>
 
     <style>
+
         * {
             box-sizing: border-box;
         }
@@ -14,10 +21,13 @@
         body {
             margin: 0;
             min-height: 100vh;
+
             display: flex;
             justify-content: center;
             align-items: center;
+
             font-family: Arial, sans-serif;
+
             background: #111;
             color: white;
         }
@@ -25,30 +35,45 @@
         .container {
             width: 90%;
             max-width: 500px;
+
             padding: 40px;
+
             background: #222;
+
             border-radius: 15px;
+
             text-align: center;
         }
 
         input {
             width: 100%;
+
             padding: 14px;
+
             margin-top: 20px;
+
             border: none;
             border-radius: 8px;
+
             font-size: 16px;
         }
 
         button {
             width: 100%;
+
             padding: 14px;
+
             margin-top: 15px;
+
             border: none;
             border-radius: 8px;
+
             background: #4c7dff;
+
             color: white;
+
             font-size: 16px;
+
             cursor: pointer;
         }
 
@@ -59,8 +84,11 @@
 
         #status {
             margin-top: 20px;
+
             padding: 15px;
+
             background: #333;
+
             border-radius: 8px;
         }
 
@@ -71,7 +99,9 @@
         .red {
             color: #ff5555;
         }
+
     </style>
+
 </head>
 
 <body>
@@ -80,7 +110,9 @@
 
     <h1>Event Participant</h1>
 
-    <p>Enter your name and start screen sharing.</p>
+    <p>
+        Enter your name and start screen sharing.
+    </p>
 
     <input
         id="name"
@@ -108,245 +140,364 @@ const socket = io();
 
 let screenStream = null;
 
+let iceServers = [
+    {
+        urls: "stun:stun.l.google.com:19302"
+    }
+];
+
 const peers = {};
 const pendingCandidates = {};
 
-const nameInput = document.getElementById("name");
-const startButton = document.getElementById("start");
-const status = document.getElementById("status");
+const nameInput =
+    document.getElementById("name");
+
+const startButton =
+    document.getElementById("start");
+
+const status =
+    document.getElementById("status");
 
 
-// ==========================
-// SOCKET CONNECTED
-// ==========================
+// ========================================
+// GET ICE CONFIG
+// ========================================
+
+async function loadIceConfig() {
+
+    try {
+
+        const response =
+            await fetch("/ice-config");
+
+        if (!response.ok) {
+            throw new Error("ICE config failed");
+        }
+
+        const config =
+            await response.json();
+
+        if (
+            config.iceServers &&
+            config.iceServers.length > 0
+        ) {
+
+            iceServers =
+                config.iceServers;
+
+        }
+
+        console.log(
+            "ICE servers loaded:",
+            iceServers
+        );
+
+    } catch (error) {
+
+        console.error(
+            "Could not load ICE config:",
+            error
+        );
+
+    }
+
+}
+
+
+loadIceConfig();
+
+
+// ========================================
+// CONNECT
+// ========================================
 
 socket.on("connect", () => {
 
-    status.textContent = "Connected.";
+    status.textContent =
+        "Connected.";
 
 });
 
 
-// ==========================
-// START SHARING
-// ==========================
+// ========================================
+// START
+// ========================================
 
-startButton.addEventListener("click", async () => {
+startButton.addEventListener(
+    "click",
+    startSharing
+);
 
-    const name = nameInput.value.trim();
+
+async function startSharing() {
+
+    const name =
+        nameInput.value.trim();
+
 
     if (!name) {
+
         alert("Enter your name.");
+
         return;
     }
+
 
     startButton.disabled = true;
     nameInput.disabled = true;
 
-    status.textContent = "Choose your screen...";
+
+    status.textContent =
+        "Choose your screen...";
+
 
     try {
 
         screenStream =
-            await navigator.mediaDevices.getDisplayMedia({
-                video: true,
-                audio: false
-            });
+            await navigator.mediaDevices
+                .getDisplayMedia({
+                    video: true,
+                    audio: false
+                });
 
-        // Tell server who we are
-        socket.emit("join-participant", name);
 
-        // Tell admin screen is ready
-        socket.emit("screen-ready");
+        socket.emit(
+            "join-participant",
+            name
+        );
+
+
+        socket.emit(
+            "screen-ready"
+        );
+
 
         status.innerHTML =
             '<span class="green">● Screen sharing active</span>';
 
+
         const track =
             screenStream.getVideoTracks()[0];
 
-        track.addEventListener("ended", () => {
 
-            status.innerHTML =
-                '<span class="red">● Screen sharing stopped</span>';
+        track.addEventListener(
+            "ended",
+            () => {
 
-            socket.emit("screen-stopped");
+                status.innerHTML =
+                    '<span class="red">● Screen sharing stopped</span>';
 
-        });
+
+                socket.emit(
+                    "screen-stopped"
+                );
+
+            }
+        );
+
 
     } catch (error) {
 
-        console.error("Screen sharing error:", error);
+        console.error(
+            "Screen sharing error:",
+            error
+        );
+
 
         status.innerHTML =
             '<span class="red">Screen sharing was cancelled.</span>';
+
 
         startButton.disabled = false;
         nameInput.disabled = false;
 
     }
 
-});
+}
 
 
-// ==========================
+// ========================================
 // RECEIVE OFFER
-// ==========================
+// ========================================
 
-socket.on("offer", async ({ sender, offer }) => {
+socket.on(
+    "offer",
+    async ({ sender, offer }) => {
 
-    if (!screenStream) {
-        console.error("No screen stream!");
-        return;
-    }
+        if (!screenStream) {
 
-    console.log("Received offer:", sender);
+            console.error(
+                "Received offer but no screen stream"
+            );
 
-    // Close previous connection
-    if (peers[sender]) {
-        peers[sender].close();
-    }
-
-    const peer = new RTCPeerConnection({
-
-        iceServers: [
-            {
-                urls: "stun:stun.l.google.com:19302"
-            }
-        ]
-
-    });
-
-    peers[sender] = peer;
-
-    pendingCandidates[sender] = [];
-
-
-    // ======================
-    // ADD SCREEN TRACK
-    // ======================
-
-    screenStream.getTracks().forEach(track => {
-
-        peer.addTrack(
-            track,
-            screenStream
-        );
-
-    });
-
-
-    // ======================
-    // ICE
-    // ======================
-
-    peer.onicecandidate = event => {
-
-        if (!event.candidate) {
             return;
         }
 
-        socket.emit("ice-candidate", {
-            target: sender,
-            candidate: event.candidate
-        });
 
-    };
+        if (peers[sender]) {
 
+            peers[sender].close();
 
-    peer.oniceconnectionstatechange = () => {
-
-        console.log(
-            "ICE state:",
-            peer.iceConnectionState
-        );
-
-    };
+        }
 
 
-    peer.onconnectionstatechange = () => {
-
-        console.log(
-            "Connection state:",
-            peer.connectionState
-        );
-
-    };
+        const peer =
+            new RTCPeerConnection({
+                iceServers
+            });
 
 
-    try {
+        peers[sender] =
+            peer;
 
-        // Set remote offer
-        await peer.setRemoteDescription(
-            offer
-        );
+        pendingCandidates[sender] =
+            [];
 
 
-        // Add candidates that arrived early
-        for (
-            const candidate
-            of pendingCandidates[sender]
-        ) {
+        // Send screen video
+        screenStream
+            .getTracks()
+            .forEach(track => {
 
-            await peer.addIceCandidate(
-                candidate
+                peer.addTrack(
+                    track,
+                    screenStream
+                );
+
+            });
+
+
+        // ICE
+        peer.onicecandidate =
+            event => {
+
+                if (!event.candidate) {
+                    return;
+                }
+
+
+                socket.emit(
+                    "ice-candidate",
+                    {
+                        target: sender,
+                        candidate:
+                            event.candidate
+                    }
+                );
+
+            };
+
+
+        peer.oniceconnectionstatechange =
+            () => {
+
+                console.log(
+                    "Participant ICE:",
+                    peer.iceConnectionState
+                );
+
+            };
+
+
+        peer.onconnectionstatechange =
+            () => {
+
+                console.log(
+                    "Participant connection:",
+                    peer.connectionState
+                );
+
+            };
+
+
+        try {
+
+            await peer.setRemoteDescription(
+                offer
+            );
+
+
+            // Add candidates received early
+
+            for (
+                const candidate
+                of pendingCandidates[sender]
+            ) {
+
+                await peer.addIceCandidate(
+                    candidate
+                );
+
+            }
+
+
+            pendingCandidates[sender] =
+                [];
+
+
+            const answer =
+                await peer.createAnswer();
+
+
+            await peer.setLocalDescription(
+                answer
+            );
+
+
+            socket.emit(
+                "answer",
+                {
+                    target: sender,
+                    answer
+                }
+            );
+
+
+        } catch (error) {
+
+            console.error(
+                "WebRTC answer error:",
+                error
             );
 
         }
 
-        pendingCandidates[sender] = [];
-
-
-        // Create answer
-        const answer =
-            await peer.createAnswer();
-
-
-        await peer.setLocalDescription(
-            answer
-        );
-
-
-        socket.emit("answer", {
-            target: sender,
-            answer: answer
-        });
-
-
-    } catch (error) {
-
-        console.error(
-            "WebRTC answer error:",
-            error
-        );
-
     }
+);
 
-});
 
-
-// ==========================
+// ========================================
 // ICE CANDIDATE
-// ==========================
+// ========================================
 
 socket.on(
     "ice-candidate",
-    async ({ sender, candidate }) => {
+    async ({
+        sender,
+        candidate
+    }) => {
 
-        const peer = peers[sender];
+        const peer =
+            peers[sender];
+
 
         if (!peer) {
 
-            // Peer hasn't been created yet
-            // Save the candidate
+            if (
+                !pendingCandidates[sender]
+            ) {
 
-            if (!pendingCandidates[sender]) {
-                pendingCandidates[sender] = [];
+                pendingCandidates[sender] =
+                    [];
+
             }
 
-            pendingCandidates[sender].push(candidate);
+
+            pendingCandidates[sender]
+                .push(candidate);
 
             return;
+
         }
 
 
@@ -363,20 +514,25 @@ socket.on(
 
             } else {
 
-                if (!pendingCandidates[sender]) {
-                    pendingCandidates[sender] = [];
+                if (
+                    !pendingCandidates[sender]
+                ) {
+
+                    pendingCandidates[sender] =
+                        [];
+
                 }
 
-                pendingCandidates[sender].push(
-                    candidate
-                );
+
+                pendingCandidates[sender]
+                    .push(candidate);
 
             }
 
         } catch (error) {
 
             console.error(
-                "ICE candidate error:",
+                "ICE error:",
                 error
             );
 
@@ -386,21 +542,26 @@ socket.on(
 );
 
 
-// ==========================
-// BEFORE LEAVING
-// ==========================
+// ========================================
+// CLOSE
+// ========================================
 
-window.addEventListener("beforeunload", () => {
+window.addEventListener(
+    "beforeunload",
+    () => {
 
-    if (screenStream) {
+        if (screenStream) {
 
-        screenStream.getTracks().forEach(
-            track => track.stop()
-        );
+            screenStream
+                .getTracks()
+                .forEach(track => {
+                    track.stop();
+                });
+
+        }
 
     }
-
-});
+);
 
 </script>
 

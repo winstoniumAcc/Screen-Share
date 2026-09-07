@@ -57,6 +57,7 @@
             padding: 12px;
 
             border-radius: 12px;
+
         }
 
         .header {
@@ -68,6 +69,7 @@
             align-items: center;
 
             margin-bottom: 10px;
+
         }
 
         .name {
@@ -75,6 +77,7 @@
             font-size: 18px;
 
             font-weight: bold;
+
         }
 
         .status {
@@ -123,7 +126,6 @@
 
 </head>
 
-
 <body>
 
 <h1>Event Admin Dashboard</h1>
@@ -134,6 +136,7 @@
     <strong id="count">0</strong>
 
 </div>
+
 
 <div id="participants">
 
@@ -153,13 +156,72 @@
 
 const socket = io();
 
+let iceServers = [
+    {
+        urls: "stun:stun.l.google.com:19302"
+    }
+];
+
 const peers = {};
 const pendingCandidates = {};
 
 
-// ==========================
-// ADMIN CONNECTS
-// ==========================
+// ========================================
+// GET ICE CONFIG
+// ========================================
+
+async function loadIceConfig() {
+
+    try {
+
+        const response =
+            await fetch("/ice-config");
+
+        if (!response.ok) {
+            throw new Error(
+                "ICE config failed"
+            );
+        }
+
+
+        const config =
+            await response.json();
+
+
+        if (
+            config.iceServers &&
+            config.iceServers.length > 0
+        ) {
+
+            iceServers =
+                config.iceServers;
+
+        }
+
+
+        console.log(
+            "ICE servers loaded:",
+            iceServers
+        );
+
+    } catch (error) {
+
+        console.error(
+            "ICE config error:",
+            error
+        );
+
+    }
+
+}
+
+
+loadIceConfig();
+
+
+// ========================================
+// CONNECT
+// ========================================
 
 socket.on("connect", () => {
 
@@ -168,14 +230,17 @@ socket.on("connect", () => {
         socket.id
     );
 
-    socket.emit("join-admin");
+
+    socket.emit(
+        "join-admin"
+    );
 
 });
 
 
-// ==========================
+// ========================================
 // EXISTING PARTICIPANTS
-// ==========================
+// ========================================
 
 socket.on(
     "participant-list",
@@ -187,6 +252,7 @@ socket.on(
                 addParticipant(
                     participant
                 );
+
 
                 if (
                     participant.screenReady
@@ -201,15 +267,16 @@ socket.on(
             }
         );
 
+
         updateCount();
 
     }
 );
 
 
-// ==========================
+// ========================================
 // NEW PARTICIPANT
-// ==========================
+// ========================================
 
 socket.on(
     "participant-joined",
@@ -219,15 +286,16 @@ socket.on(
             participant
         );
 
+
         updateCount();
 
     }
 );
 
 
-// ==========================
+// ========================================
 // SCREEN READY
-// ==========================
+// ========================================
 
 socket.on(
     "screen-ready",
@@ -238,15 +306,18 @@ socket.on(
             participant.name
         );
 
+
         addParticipant(
             participant
         );
+
 
         setStatus(
             participant.socketId,
             "● CONNECTING",
             "sharing"
         );
+
 
         createOffer(
             participant.socketId
@@ -256,35 +327,46 @@ socket.on(
 );
 
 
-// ==========================
+// ========================================
 // SCREEN STOPPED
-// ==========================
+// ========================================
 
 socket.on(
     "screen-stopped",
     participant => {
 
-        const element =
+        const card =
             document.getElementById(
-                "p-" + participant.socketId
+                "p-" +
+                participant.socketId
             );
 
-        if (!element) {
+
+        if (!card) {
             return;
         }
 
+
         const video =
-            element.querySelector("video");
+            card.querySelector(
+                "video"
+            );
+
 
         if (video) {
-            video.srcObject = null;
+
+            video.srcObject =
+                null;
+
         }
+
 
         setStatus(
             participant.socketId,
             "● SCREEN STOPPED",
             "offline"
         );
+
 
         if (
             peers[
@@ -296,6 +378,7 @@ socket.on(
                 participant.socketId
             ].close();
 
+
             delete peers[
                 participant.socketId
             ];
@@ -306,9 +389,9 @@ socket.on(
 );
 
 
-// ==========================
+// ========================================
 // PARTICIPANT LEFT
-// ==========================
+// ========================================
 
 socket.on(
     "participant-left",
@@ -319,14 +402,18 @@ socket.on(
             participant.name
         );
 
-        const element =
+
+        const card =
             document.getElementById(
-                "p-" + participant.socketId
+                "p-" +
+                participant.socketId
             );
 
-        if (!element) {
+
+        if (!card) {
             return;
         }
+
 
         setStatus(
             participant.socketId,
@@ -334,14 +421,20 @@ socket.on(
             "offline"
         );
 
+
         const video =
-            element.querySelector(
+            card.querySelector(
                 "video"
             );
 
+
         if (video) {
-            video.srcObject = null;
+
+            video.srcObject =
+                null;
+
         }
+
 
         if (
             peers[
@@ -353,11 +446,13 @@ socket.on(
                 participant.socketId
             ].close();
 
+
             delete peers[
                 participant.socketId
             ];
 
         }
+
 
         updateCount();
 
@@ -365,9 +460,9 @@ socket.on(
 );
 
 
-// ==========================
+// ========================================
 // ADD PARTICIPANT
-// ==========================
+// ========================================
 
 function addParticipant(
     participant
@@ -375,28 +470,41 @@ function addParticipant(
 
     if (
         document.getElementById(
-            "p-" + participant.socketId
+            "p-" +
+            participant.socketId
         )
     ) {
+
         return;
+
     }
 
+
     const empty =
-        document.getElementById("empty");
+        document.getElementById(
+            "empty"
+        );
+
 
     if (empty) {
         empty.remove();
     }
 
+
     const card =
-        document.createElement("div");
+        document.createElement(
+            "div"
+        );
+
 
     card.className =
         "participant";
 
+
     card.id =
         "p-" +
         participant.socketId;
+
 
     card.innerHTML = `
 
@@ -422,60 +530,52 @@ function addParticipant(
 
     `;
 
+
     document
         .getElementById(
             "participants"
         )
         .appendChild(card);
 
+
     updateCount();
 
 }
 
 
-// ==========================
+// ========================================
 // CREATE OFFER
-// ==========================
+// ========================================
 
 async function createOffer(
     target
 ) {
 
-    // Close existing connection
-    if (peers[target]) {
+    if (
+        peers[target]
+    ) {
 
         peers[target].close();
-
-        delete peers[target];
 
     }
 
 
     const peer =
         new RTCPeerConnection({
-
-            iceServers: [
-
-                {
-                    urls:
-                        "stun:stun.l.google.com:19302"
-                }
-
-            ]
-
+            iceServers
         });
 
 
     peers[target] =
         peer;
 
+
     pendingCandidates[target] =
         [];
 
 
-    // ======================
-    // RECEIVE VIDEO
-    // ======================
+    // Tell participant:
+    // Admin wants to receive video
 
     peer.addTransceiver(
         "video",
@@ -485,58 +585,60 @@ async function createOffer(
     );
 
 
-    peer.ontrack = event => {
+    // ====================================
+    // RECEIVE SCREEN
+    // ====================================
 
-        console.log(
-            "Received video from:",
-            target
-        );
+    peer.ontrack =
+        event => {
 
-
-        const card =
-            document.getElementById(
-                "p-" + target
+            console.log(
+                "Received screen:",
+                target
             );
 
 
-        if (!card) {
-            return;
-        }
-
-
-        const video =
-            card.querySelector(
-                "video"
-            );
-
-
-        video.srcObject =
-            event.streams[0];
-
-
-        // Explicitly start playback
-        video.play().catch(
-            error => {
-                console.error(
-                    "Video play error:",
-                    error
+            const card =
+                document.getElementById(
+                    "p-" +
+                    target
                 );
+
+
+            if (!card) {
+                return;
             }
-        );
 
 
-        setStatus(
-            target,
-            "● SHARING",
-            "sharing"
-        );
-
-    };
+            const video =
+                card.querySelector(
+                    "video"
+                );
 
 
-    // ======================
+            if (
+                video &&
+                event.streams.length > 0
+            ) {
+
+                video.srcObject =
+                    event.streams[0];
+
+            }
+
+
+            setStatus(
+                target,
+                "● SHARING",
+                "sharing"
+            );
+
+        };
+
+
+    // ====================================
     // ICE
-    // ======================
+    // ====================================
 
     peer.onicecandidate =
         event => {
@@ -544,6 +646,7 @@ async function createOffer(
             if (!event.candidate) {
                 return;
             }
+
 
             socket.emit(
                 "ice-candidate",
@@ -557,11 +660,15 @@ async function createOffer(
         };
 
 
+    // ====================================
+    // STATES
+    // ====================================
+
     peer.oniceconnectionstatechange =
         () => {
 
             console.log(
-                "ICE:",
+                "Admin ICE:",
                 target,
                 peer.iceConnectionState
             );
@@ -573,7 +680,7 @@ async function createOffer(
         () => {
 
             console.log(
-                "Connection:",
+                "Admin WebRTC:",
                 target,
                 peer.connectionState
             );
@@ -609,6 +716,10 @@ async function createOffer(
         };
 
 
+    // ====================================
+    // CREATE OFFER
+    // ====================================
+
     try {
 
         const offer =
@@ -641,9 +752,9 @@ async function createOffer(
 }
 
 
-// ==========================
-// RECEIVE ANSWER
-// ==========================
+// ========================================
+// ANSWER
+// ========================================
 
 socket.on(
     "answer",
@@ -665,29 +776,24 @@ socket.on(
             );
 
 
-            // Add candidates that arrived
-            // before the answer
+            // Add candidates
+            // that came early
 
-            if (
-                pendingCandidates[sender]
+            for (
+                const candidate
+                of pendingCandidates[sender] || []
             ) {
 
-                for (
-                    const candidate
-                    of pendingCandidates[sender]
-                ) {
-
-                    await peer.addIceCandidate(
-                        candidate
-                    );
-
-                }
-
-
-                pendingCandidates[sender] =
-                    [];
+                await peer.addIceCandidate(
+                    candidate
+                );
 
             }
+
+
+            pendingCandidates[sender] =
+                [];
+
 
         } catch (error) {
 
@@ -702,9 +808,9 @@ socket.on(
 );
 
 
-// ==========================
-// RECEIVE ICE
-// ==========================
+// ========================================
+// ICE CANDIDATE
+// ========================================
 
 socket.on(
     "ice-candidate",
@@ -717,9 +823,6 @@ socket.on(
             peers[sender];
 
 
-        // Candidate came before
-        // peer was created
-
         if (!peer) {
 
             if (
@@ -731,8 +834,10 @@ socket.on(
 
             }
 
+
             pendingCandidates[sender]
                 .push(candidate);
+
 
             return;
 
@@ -764,6 +869,7 @@ socket.on(
 
                 }
 
+
                 pendingCandidates[
                     sender
                 ].push(candidate);
@@ -773,7 +879,7 @@ socket.on(
         } catch (error) {
 
             console.error(
-                "ICE error:",
+                "ICE candidate error:",
                 error
             );
 
@@ -783,9 +889,9 @@ socket.on(
 );
 
 
-// ==========================
+// ========================================
 // STATUS
-// ==========================
+// ========================================
 
 function setStatus(
     socketId,
@@ -795,24 +901,30 @@ function setStatus(
 
     const card =
         document.getElementById(
-            "p-" + socketId
+            "p-" +
+            socketId
         );
+
 
     if (!card) {
         return;
     }
+
 
     const status =
         card.querySelector(
             ".status"
         );
 
+
     if (!status) {
         return;
     }
 
+
     status.textContent =
         text;
+
 
     status.className =
         "status " +
@@ -821,9 +933,9 @@ function setStatus(
 }
 
 
-// ==========================
+// ========================================
 // COUNT
-// ==========================
+// ========================================
 
 function updateCount() {
 
@@ -832,27 +944,33 @@ function updateCount() {
             ".participant"
         );
 
+
     let online = 0;
 
-    cards.forEach(card => {
 
-        const status =
-            card.querySelector(
-                ".status"
-            );
+    cards.forEach(
+        card => {
 
-        if (
-            status &&
-            !status.classList.contains(
-                "offline"
-            )
-        ) {
+            const status =
+                card.querySelector(
+                    ".status"
+                );
 
-            online++;
+
+            if (
+                status &&
+                !status.classList.contains(
+                    "offline"
+                )
+            ) {
+
+                online++;
+
+            }
 
         }
+    );
 
-    });
 
     document.getElementById(
         "count"
@@ -862,11 +980,13 @@ function updateCount() {
 }
 
 
-// ==========================
+// ========================================
 // ESCAPE HTML
-// ==========================
+// ========================================
 
-function escapeHTML(text) {
+function escapeHTML(
+    text
+) {
 
     const div =
         document.createElement(
