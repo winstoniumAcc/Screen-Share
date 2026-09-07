@@ -154,16 +154,7 @@
 
 <script>
 
-const socket = io({
-    reconnection: true,
-    reconnectionAttempts: Infinity,
-    reconnectionDelay: 1000,
-    reconnectionDelayMax: 5000
-});
-
-let adminPassword = sessionStorage.getItem("adminPassword");
-
-let authenticated = false;
+const socket = io();
 
 let iceServers = [
     { urls: "stun:stun.relay.metered.ca:80", }, { urls: "turn:global.relay.metered.ca:80", username: "827a93ca2e7e93b4d15f094d", credential: "o8h4jqAFDO9qDUwO", }, { urls: "turn:global.relay.metered.ca:80?transport=tcp", username: "827a93ca2e7e93b4d15f094d", credential: "o8h4jqAFDO9qDUwO", }, { urls: "turn:global.relay.metered.ca:443", username: "827a93ca2e7e93b4d15f094d", credential: "o8h4jqAFDO9qDUwO", }, { urls: "turns:global.relay.metered.ca:443?transport=tcp", username: "827a93ca2e7e93b4d15f094d", credential: "o8h4jqAFDO9qDUwO", },
@@ -267,82 +258,24 @@ loadIceConfig();
 
 socket.on("connect", () => {
 
-    console.log("Socket connected:", socket.id);
-
-    // Password already saved
-    if (adminPassword) {
-
-        console.log("Authenticating with saved password...");
-
-        socket.emit(
-            "join-admin",
-            adminPassword
-        );
-
-        return;
-    }
-
-
-    // First connection
-    const password =
-        prompt("Enter admin password:");
-
-
-    if (!password) {
-
-        showAccessDenied(
-            "No password entered."
-        );
-
-        return;
-    }
-
-
-    adminPassword =
-        password;
-
-    sessionStorage.setItem(
-        "adminPassword",
-        adminPassword
+    const password = prompt(
+        "Enter admin password:"
     );
 
+    if (!password) {
+        document.body.innerHTML =
+            "<h1>Access denied</h1>";
+        return;
+    }
 
     socket.emit(
         "join-admin",
-        adminPassword
+        password
     );
-
 });
 
-socket.on("admin-authenticated", () => {
-
-    authenticated = true;
-
-    console.log(
-        "Admin authenticated."
-    );
-
-});
 
 socket.on("admin-denied", () => {
-
-    authenticated = false;
-
-    sessionStorage.removeItem(
-        "adminPassword"
-    );
-
-    adminPassword = null;
-
-
-    showAccessDenied(
-        "Incorrect admin password."
-    );
-
-});
-
-
-function showAccessDenied(message) {
 
     document.body.innerHTML = `
         <div style="
@@ -350,26 +283,14 @@ function showAccessDenied(message) {
             text-align: center;
             margin-top: 100px;
         ">
-
             <h1>Access Denied</h1>
-
-            <p>${message}</p>
-
-            <button
-                onclick="location.reload()"
-                style="
-                    padding: 10px 20px;
-                    font-size: 16px;
-                    cursor: pointer;
-                "
-            >
-                Try Again
-            </button>
-
+            <p>Incorrect admin password.</p>
         </div>
     `;
 
-}
+    socket.disconnect();
+
+});
 
 // ========================================
 // EXISTING PARTICIPANTS
