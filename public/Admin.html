@@ -163,7 +163,7 @@ let iceServers = [
 const peers = {};
 const pendingCandidates = {};
 
-const ADMIN_PASSWORD = "SkibidiToilet";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 socket.on("join-admin", (password) => {
 
     if (!ADMIN_PASSWORD || password !== ADMIN_PASSWORD) {
