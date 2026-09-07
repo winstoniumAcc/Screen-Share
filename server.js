@@ -57,9 +57,7 @@ app.get("/admin", (req, res) => {
 app.get("/ice-config", (req, res) => {
 
     const iceServers = [
-        {
-           { urls: "stun:stun.relay.metered.ca:80", }, { urls: "turn:global.relay.metered.ca:80", username: "827a93ca2e7e93b4d15f094d", credential: "o8h4jqAFDO9qDUwO", }, { urls: "turn:global.relay.metered.ca:80?transport=tcp", username: "827a93ca2e7e93b4d15f094d", credential: "o8h4jqAFDO9qDUwO", }, { urls: "turn:global.relay.metered.ca:443", username: "827a93ca2e7e93b4d15f094d", credential: "o8h4jqAFDO9qDUwO", }, { urls: "turns:global.relay.metered.ca:443?transport=tcp", username: "827a93ca2e7e93b4d15f094d", credential: "o8h4jqAFDO9qDUwO", },
-        }
+        { urls: "stun:stun.relay.metered.ca:80", }, { urls: "turn:global.relay.metered.ca:80", username: "827a93ca2e7e93b4d15f094d", credential: "o8h4jqAFDO9qDUwO", }, { urls: "turn:global.relay.metered.ca:80?transport=tcp", username: "827a93ca2e7e93b4d15f094d", credential: "o8h4jqAFDO9qDUwO", }, { urls: "turn:global.relay.metered.ca:443", username: "827a93ca2e7e93b4d15f094d", credential: "o8h4jqAFDO9qDUwO", }, { urls: "turns:global.relay.metered.ca:443?transport=tcp", username: "827a93ca2e7e93b4d15f094d", credential: "o8h4jqAFDO9qDUwO", },
     ];
 
 
