@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Dashboard</title>
+
+    <style>
+
+        body {
+            font-family: Arial;
+            margin: 20px;
+            background: #111;
+            color: white;
+        }
+
+        #participants {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 15px;
+        }
+
+        .participant {
+            background: #222;
+            padding: 10px;
+            border-radius: 10px;
+        }
+
+        .name {
+            font-size: 18px;
+            margin-bottom: 8px;
+        }
+
+        .online {
+            color: #4cff72;
+        }
+
+        .offline {
+            color: #ff5555;
+        }
+
+        video {
+            width: 100%;
+            background: black;
+            border-radius: 6px;
+        }
+
+    </style>
+</head>
+
+<body>
+
+<h1>Event Admin</h1>
+
+<p>
+    Participants:
+    <span id="count">0</span>
+</p>
+
+<div id="participants"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+
+const socket = io();
+
+const peers = {};
+
+socket.on("connect", () => {
+    socket.emit("join-admin");
+});
+
+
+socket.on("participant-list", participants => {
+
+    participants.forEach(participant => {
+        addParticipant(participant);
+        createOffer(participant.socketId);
+    });
+
+});
+
+
+socket.on("participant-joined", participant => {
+
+    addParticipant(participant);
+
+    createOffer(participant.socketId);
+
+});
+
+
+socket.on("participant-left", participant => {
+
+    const element =
+        document.getElementById("p-" + participant.socketId);
+
+    if (element) {
+
+        element.querySelector(".status").textContent =
+            "● OFFLINE";
+
+        element.querySelector(".status").className =
+            "status offline";
+
+        const video = element.querySelector("video");
+
+        video.srcObject = null;
+    }
+
+    if (peers[participant.socketId]) {
+        peers[participant.socketId].close();
+        delete peers[participant.socketId];
+    }
+
+    updateCount();
+});
+
+
+function addParticipant(participant) {
+
+    if (document.getElementById("p-" + participant.socketId))
+        return;
+
+    const div = document.createElement("div");
+
+    div.className = "participant";
+    div.id = "p-" + participant.socketId;
+
+    div.innerHTML = `
+        <div class="name">
+            ${escapeHTML(participant.name)}
+        </div>
+
+        <div class="status online">
+            ● ONLINE
+        </div>
+
+        <video autoplay playsinline></video>
+    `;
+
+    document
+        .getElementById("participants")
+        .appendChild(div);
+
+    updateCount();
+}
+
+
+async function createOffer(target) {
+
+    const peer = new RTCPeerConnection({
+        iceServers: [
+            { urls: "stun:stun.l.google.com:19302" }
+        ]
+    });
+
+    peers[target] = peer;
+
+    peer.ontrack = event => {
+
+        const element =
+            document.getElementById("p-" + target);
+
+        if (!element)
+            return;
+
+        element.querySelector("video").srcObject =
+            event.streams[0];
+    };
+
+
+    peer.onicecandidate = event => {
+
+        if (event.candidate) {
+
+            socket.emit("ice-candidate", {
+                target,
+                candidate: event.candidate
+            });
+
+        }
+
+    };
+
+
+    const offer = await peer.createOffer();
+
+    await peer.setLocalDescription(offer);
+
+    socket.emit("offer", {
+        target,
+        offer
+    });
+}
+
+
+socket.on("answer", async ({ sender, answer }) => {
+
+    const peer = peers[sender];
+
+    if (!peer)
+        return;
+
+    await peer.setRemoteDescription(answer);
+
+});
+
+
+socket.on("ice-candidate", async ({ sender, candidate }) => {
+
+    const peer = peers[sender];
+
+    if (!peer)
+        return;
+
+    try {
+        await peer.addIceCandidate(candidate);
+    } catch (error) {
+        console.error(error);
+    }
+
+});
+
+
+function updateCount() {
+
+    document.getElementById("count").textContent =
+        document.querySelectorAll(".participant").length;
+}
+
+
+function escapeHTML(text) {
+
+    const div = document.createElement("div");
+
+    div.textContent = text;
+
+    return div.innerHTML;
+}
+
+</script>
+
+</body>
+</html>
