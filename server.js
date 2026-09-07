@@ -96,13 +96,12 @@ io.on("connection", (socket) => {
 
 
     // ====================================
-    // PARTICIPANT JOIN
+    // PARTICIPANT JOINS
     // ====================================
 
     socket.on("join-participant", (name) => {
 
         socket.data.role = "participant";
-
         socket.data.name =
             String(name || "Unknown").trim();
 
@@ -126,47 +125,68 @@ io.on("connection", (socket) => {
 
 
     // ====================================
-    // ADMIN JOIN
+    // ADMIN JOINS
     // ====================================
 
-    socket.on("join-admin", () => {
+    socket.on("join-admin", (password) => {
 
-        socket.data.role = "admin";
+    if (
+        !process.env.ADMIN_PASSWORD ||
+        password !== process.env.ADMIN_PASSWORD
+    ) {
 
-        console.log(
-            `Admin joined: ${socket.id}`
-        );
+        socket.emit("admin-denied");
+
+        return;
+    }
 
 
-        const participants = [];
+    socket.data.role = "admin";
 
-        for (
-            const client
-            of io.sockets.sockets.values()
+    console.log(
+        "Admin authenticated:",
+        socket.id
+    );
+
+
+    // Tell browser authentication succeeded
+    socket.emit("admin-authenticated");
+
+
+    const participants = [];
+
+    for (
+        const client
+        of io.sockets.sockets.values()
+    ) {
+
+        if (
+            client.data.role === "participant" &&
+            client.data.name
         ) {
 
-            if (
-                client.data.role === "participant"
-            ) {
+            participants.push({
 
-                participants.push({
-                    socketId: client.id,
-                    name: client.data.name,
-                    screenReady:
-                        client.data.screenReady === true
-                });
+                socketId: client.id,
 
-            }
+                name: client.data.name,
+
+                screenReady:
+                    client.data.screenReady === true
+
+            });
 
         }
 
+    }
 
-        socket.emit(
-            "participant-list",
-            participants
-        );
 
-    });
+    socket.emit(
+        "participant-list",
+        participants
+    );
+
+});
 
 
     // ====================================
@@ -215,6 +235,11 @@ io.on("connection", (socket) => {
 
 
         socket.data.screenReady = false;
+
+
+        console.log(
+            `Screen stopped: ${socket.data.name}`
+        );
 
 
         socket.broadcast.emit(
@@ -312,8 +337,7 @@ io.on("connection", (socket) => {
         (reason) => {
 
             console.log(
-                "Disconnected:",
-                socket.id,
+                `Disconnected: ${socket.id}`,
                 reason
             );
 
