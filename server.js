@@ -54,6 +54,8 @@ app.get("/admin", (req, res) => {
 // TURN_URL=turn:your-turn-server.com:3478
 //
 
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+
 app.get("/ice-config", (req, res) => {
 
     const iceServers = [

@@ -172,42 +172,6 @@ let iceServers = [
 const peers = {};
 const pendingCandidates = {};
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-socket.on("join-admin", (password) => {
-
-    if (!ADMIN_PASSWORD || password !== ADMIN_PASSWORD) {
-
-        socket.emit("admin-denied");
-
-        return;
-    }
-
-    socket.data.role = "admin";
-
-    console.log("Admin authenticated:", socket.id);
-
-    const participants = [];
-
-    for (const client of io.sockets.sockets.values()) {
-
-        if (
-            client.data.role === "participant" &&
-            client.data.name
-        ) {
-
-            participants.push({
-                socketId: client.id,
-                name: client.data.name,
-                screenReady:
-                    client.data.screenReady === true
-            });
-        }
-    }
-
-    socket.emit("participant-list", participants);
-});
-
-
 // ========================================
 // GET ICE CONFIG
 // ========================================
